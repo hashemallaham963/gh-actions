@@ -15,6 +15,7 @@ inputs:
   token:
     description: 'The access token, e.g: PAT'
     required: true
+    default: "dummytoken-to-enable-public-repo-clone"
   depth:
     description: 'The depth of the clone'
     required: true
@@ -65,6 +66,10 @@ runs:
 
 
         # === validation:
+        echo "🤔 Validating..."
+        echo "Current working directory: $(pwd)"
+        echo "Listing files:"
+        ls -la
         exitstatus=$?
         if [ $exitstatus = 0 ]; then
           echo "✅ success"
