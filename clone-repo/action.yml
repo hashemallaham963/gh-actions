@@ -62,7 +62,7 @@ runs:
         # === cloning:
         git clone --depth ${{ inputs.depth }} \
         --single-branch --branch main \
-        -u https://x-access-token:${{ inputs.token }}@${{ inputs.repository_url }} . || { echo "❌ Failed to clone repository"; exit 1; }
+        -u https://x-access-token:${{ inputs.token }}@${{ inputs.repository_url }} || { echo "❌ Failed to clone repository"; exit 1; }
 
 
         # === validation:

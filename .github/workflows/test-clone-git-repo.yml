@@ -4,14 +4,14 @@ on:
   workflow_dispatch:
 
 jobs:
-  send:
+  test:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
       
-      - name: Send to slack
-        id: send-to-slack
+      - name: test the action
+        id: test-step
         uses: hashemallaham963/gh-actions/clone-repo@main
         with:
           repository_url: "https://github.com/hashemallaham963/gh-actions.git"
