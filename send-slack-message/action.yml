@@ -1,0 +1,71 @@
+# Action Information
+name: 'Send Slack Message'
+description: 'Send messages to Slack using incoming webhook URL. Created by Hashem Allaham <hashem.allaham@gmail.com>'
+branding:
+  icon: 'message-square'
+  color: 'blue'
+
+
+# Action Inputs
+inputs:
+  webhook-url:
+    description: 'Slack incoming webhook URL'
+    required: true
+  message:
+    description: 'Message text to send'
+    required: true
+    default: 'Workflow completed!'
+  username: # optional
+    description: 'Custom bot username'
+    required: false
+
+
+# Action Outputs
+outputs:
+  status:
+    description: 'Status of the operation'
+    value: ${{ steps.slack-runner.outputs.status }}
+
+
+# Action logic and steps
+runs:
+  using: "composite"
+  steps:
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+    
+    - name: Install dependencies
+      shell: bash
+      run: pip install requests
+    
+    - name: Send Slack message
+      id: slack-runner
+      shell: bash
+      env:
+        SLACK_WEBHOOK_URL: ${{ inputs.webhook-url }}
+        SLACK_MESSAGE: ${{ inputs.message }}
+        SLACK_USERNAME: ${{ inputs.username }} # optional
+      run: |
+        python << 'EOF'
+        import os, sys, json, requests
+        
+        webhook_url = os.environ.get('SLACK_WEBHOOK_URL')
+        message = os.environ.get('SLACK_MESSAGE')
+        username = os.environ.get('SLACK_USERNAME')
+        
+        payload = {"text": message}
+        if username:
+            payload["username"] = username
+        
+        response = requests.post(webhook_url, json=payload, timeout=10)
+        status = "success" if response.status_code == 200 else "failed"
+        
+        github_output = os.environ.get('GITHUB_OUTPUT')
+        if github_output:
+            with open(github_output, 'a') as f:
+                f.write(f"status={status}\n")
+        
+        sys.exit(0 if response.status_code == 200 else 1)
+        EOF
