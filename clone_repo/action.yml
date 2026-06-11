@@ -1,0 +1,75 @@
+
+# Information:
+name: clone git repo
+description: "Cloning a Git repository to the current working directory on runner"
+branding:
+  icon: 'message-square'
+  color: 'blue'
+
+
+# Inputs:
+inputs:
+  repository_url:
+    description: 'The GIT repository URL'
+    required: true
+  token:
+    description: 'The access token, e.g: PAT'
+    required: true
+  depth:
+    description: 'The depth of the clone'
+    required: true
+    default: 1
+  branch:
+    description: 'The branch name'
+    required: true
+    default: "main"
+  
+
+# Outputs:
+outputs:
+  status:
+    description: 'Status of the operation'
+    value: ${{ steps.step2.outputs.status }}
+
+
+# Logic
+runs:
+  using: "composite"
+  steps:
+    - name: setup dependencies
+      id: step1
+      shell: bash
+      run: |
+        echo ""
+        echo "install dependencies"
+        # check if git is installed on runner
+        if ! command -v git &> /dev/null; then
+            echo "git is not installed. Installing it..."
+            sudo apt update && sudo apt install -y git
+        fi
+
+
+    - name: clone
+      id: step2
+      shell: bash
+      run: |
+        echo ""
+
+        # define trap to return failed output
+        trap 'echo "status=failed" >> "$GITHUB_OUTPUT"' ERR
+
+        # === cloning:
+        git clone --depth ${{ inputs.depth }} \
+        --single-branch --branch main \
+        -u https://x-access-token:${{ inputs.token }}@${{ inputs.repository_url }} . || { echo "❌ Failed to clone repository"; exit 1; }
+
+
+        # === validation:
+        exitstatus=$?
+        if [ $exitstatus = 0 ]; then
+          echo "✅ success"
+          echo "status=success" >> "$GITHUB_OUTPUT"
+        else
+          echo "❌ failed"
+          echo "status=failed" >> "$GITHUB_OUTPUT"
+        fi
