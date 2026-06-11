@@ -12,17 +12,20 @@ inputs:
   repository_url:
     description: 'The GIT repository URL'
     required: true
+
   token:
     description: 'The access token, e.g: PAT'
-    required: true
+    required: false
     default: "dummytoken-to-enable-public-repo-clone"
+
   depth:
     description: 'The depth of the clone'
-    required: true
+    required: false
     default: 1
+
   branch:
     description: 'The branch name'
-    required: true
+    required: false
     default: "main"
   
 
@@ -30,7 +33,7 @@ inputs:
 outputs:
   status:
     description: 'Status of the operation'
-    value: ${{ steps.step2.outputs.status }}
+    value: ${{ steps.clone.outputs.status }}
 
 
 # Logic
@@ -41,35 +44,55 @@ runs:
       id: step1
       shell: bash
       run: |
-        echo ""
         echo "install dependencies"
         # check if git is installed on runner
-        if ! command -v git &> /dev/null; then
-            echo "git is not installed. Installing it..."
-            sudo apt update && sudo apt install -y git
+        if ! command -v git >/dev/null 2>&1; then
+            echo "Installing git..."
+            sudo apt update
+            sudo apt-get install -y git
         fi
 
 
-    - name: clone
-      id: step2
+    - name: cloning the repo
+      id: clone
       shell: bash
+      env:
+        REPOSITORY_URL: ${{ inputs.repository_url }}
+        TOKEN: ${{ inputs.token }}
+        DEPTH: ${{ inputs.depth }}
+        BRANCH: ${{ inputs.branch }}
       run: |
         echo ""
 
-        # define trap to return failed output
         trap 'echo "status=failed" >> "$GITHUB_OUTPUT"' ERR
 
+        echo "Cloning repository..."
+        echo "URL: $REPOSITORY_URL"
+        echo "Branch: $BRANCH"
+        echo "Depth: $DEPTH"
+
+        if [ -n "$TOKEN" ]; then
+          AUTH_URL="https://x-access-token:${TOKEN}@${REPOSITORY_URL#https://}"
+        else
+          AUTH_URL="$REPOSITORY_URL"
+        fi
+
         # === cloning:
-        git clone --depth ${{ inputs.depth }} \
-        --single-branch --branch main \
-        -u https://x-access-token:${{ inputs.token }}@${{ inputs.repository_url }} || { echo "❌ Failed to clone repository"; exit 1; }
+        git clone \
+        --depth ${{ inputs.depth }} \
+        --single-branch \
+        --branch main \
+        "$AUTH_URL"
 
 
         # === validation:
         echo "🤔 Validating..."
         echo "Current working directory: $(pwd)"
+        
         echo "Listing files:"
+        echo "--------------"
         ls -la
+
         exitstatus=$?
         if [ $exitstatus = 0 ]; then
           echo "✅ success"
