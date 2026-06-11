@@ -1,0 +1,25 @@
+name: test git clone repo
+
+on:
+  workflow_dispatch:
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Send to slack
+        id: send-to-slack
+        uses: hashemallaham963/gh-actions/send-slack-message@v1
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          username: "Bot"
+          message: |
+            ✅ Test integration message by Hashem, skip it.
+
+      
+      - name: consume the used action outputs # (outputs format should be included in the documentation of the Action)
+        run: |
+          echo "The returned status: ${{ steps.send-to-slack.outputs.status }}"
