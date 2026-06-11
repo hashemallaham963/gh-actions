@@ -1,0 +1,99 @@
+
+# Information:
+name: "Send to Slack"
+description: "Sends a Slack notification using Slack Incoming-Webhook app"
+
+
+# Inputs:
+inputs:
+  status:
+    description: "Notification title with an emoji"
+    required: true
+  webhook_url:
+    description: "Incoming-Webhook URL"
+    required: true
+  branch:
+    required: true
+  commit_message:
+    required: true
+  author_name:
+    required: true
+  pull_request_message:
+    required: false
+  pull_request_user:
+    required: false
+
+
+# Outputs:
+# none
+
+
+# Action Logic:
+runs:
+  using: "composite"
+  steps:
+    - name: send slack notification
+      run: |
+        COLOR_SUCCESS="#2ECC71"  # green
+        COLOR_FAILURE="#E74C3C"  # red
+
+        if [[ "${{ inputs.status }}" == *"✅"* ]]; then
+          COLOR="$COLOR_SUCCESS"
+        else
+          COLOR="$COLOR_FAILURE"
+        fi
+
+        BRANCH="${{ inputs.branch }}"
+        COMMIT="${{ inputs.commit_message }}"
+        AUTHOR="${{ inputs.author_name }}"
+        PR_MSG="${{ inputs.pull_request_message }}"
+        PR_USER="${{ inputs.pull_request_user }}"
+        STATUS="${{ inputs.status }}"
+
+        PAYLOAD=$(jq -n \
+          --arg status "$STATUS" \
+          --arg branch "$BRANCH" \
+          --arg commit "$COMMIT" \
+          --arg author "$AUTHOR" \
+          --arg color "$COLOR" \
+          --arg pr_msg "$PR_MSG" \
+          --arg pr_user "$PR_USER" \
+          '{
+            attachments: [{
+              color: $color,
+              blocks: [
+                {
+                  type: "section",
+                  text: {
+                    type: "mrkdwn",
+                    text: "*\($status)*"
+                  }
+                },
+                {
+                  type: "section",
+                  fields: [
+                    { type: "mrkdwn", text: "*Branch:*\n`\($branch)`" },
+                    { type: "mrkdwn", text: "*Author:*\n\($author)" },
+                    { type: "mrkdwn", text: "*Commit:*\n\($commit)" }
+                  ]
+                }
+              ]
+            }]
+          }
+          | if $pr_msg != "" then
+              .attachments[0].blocks += [{
+                type: "section",
+                fields: [{ type: "mrkdwn", text: "*Pull request:*\n\($pr_msg)" }]
+              }]
+            else . end
+          | if $pr_user != "" then
+              .attachments[0].blocks += [{
+                type: "section",
+                fields: [{ type: "mrkdwn", text: "*Accepted by:*\n\($pr_user)" }]
+              }]
+            else . end')
+
+        curl -X POST -H "Content-Type: application/json" \
+          -d "$PAYLOAD" \
+          "${{ inputs.webhook_url }}"
+      shell: bash
