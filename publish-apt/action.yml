@@ -1,0 +1,80 @@
+
+# Information:
+name: publish to APT repository
+description: "Pushing .deb packages to SonaType Nexus APT repository"
+branding:
+  icon: 'message-square'
+  color: 'blue'
+
+
+
+# Inputs:
+inputs:
+  repository_url:
+    description: 'The Nexus APT repository URL'
+    required: true
+  repository_username:
+    description: 'The username'
+    required: true
+    default: 'admin'
+  repository_password:
+    description: 'The password'
+    required: true
+  package_path:
+    description: 'The .deb file absolute path on the runner filesystem'
+    required: true
+  repository_hostname:
+    description: 'The domain name of the repositroy in case we used IP address in the repository_url input'
+    required: false
+
+
+
+# Outputs:
+outputs:
+  status:
+    description: 'Status of the operation'
+    value: ${{ steps.step2.outputs.status }}
+
+
+
+# Logic:
+runs:
+  using: "composite"
+  steps:
+    - name: setup dependencies
+      id: step1
+      shell: bash
+      run: |
+        echo "install dependencies"
+
+    - name: publish .deb file
+      id: step2
+      shell: bash
+      env:
+        repository_url: ${{ inputs.repository_url }}
+        repository_username: ${{ inputs.repository_username }}
+        repository_password: ${{ inputs.repository_password }}
+        package_path: ${{ inputs.package_path }}
+        repository_hostname: ${{ inputs.repository_hostname }}
+      run: |
+        echo "publish .deb file"
+
+        # check if curl is installed
+        if ! command -v curl &> /dev/null; then
+            echo "curl is not installed. Please install curl first."
+            exit 1
+        fi
+
+        # publish .deb file
+        if [  -n $repository_hostname ]; then
+          curl -v -u $repository_username:$repository_password \
+          -H "Content-Type: multipart/form-data" \
+          --data-binary "@${{ inputs.package_path }}" $repository_url -H "Host: $repository_hostname"
+        else
+          # send without Host Header
+          curl -v -u $repository_username:$repository_password \
+          -H "Content-Type: multipart/form-data" \
+          --data-binary "@${{ inputs.package_path }}" $repository_url
+
+
+        echo "status=success" >> "$GITHUB_OUTPUT"
