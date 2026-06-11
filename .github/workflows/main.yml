@@ -1,0 +1,17 @@
+name: placeholder
+
+on:
+  workflow_dispatch:
+
+env:
+  env1: "placeholder"
+
+permissions:
+  contents: write
+
+jobs:
+  runs-on: ubuntu-latest
+
+  steps:
+    - name: echo env value
+      run: echo ${{ env.env1 }}
