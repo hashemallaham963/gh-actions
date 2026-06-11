@@ -12,14 +12,12 @@ jobs:
       
       - name: Send to slack
         id: send-to-slack
-        uses: hashemallaham963/gh-actions/send-slack-message@v1
+        uses: hashemallaham963/gh-actions/clone-repo@main
         with:
-          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
-          username: "Bot"
-          message: |
-            ✅ Test integration message by Hashem, skip it.
+          repository_url: "https://github.com/hashemallaham963/gh-actions.git"
+          depth: 1
+          branch: "main"
 
       
-      - name: consume the used action outputs # (outputs format should be included in the documentation of the Action)
-        run: |
-          echo "The returned status: ${{ steps.send-to-slack.outputs.status }}"
+      - name: list files and directories
+        run: ls -la
