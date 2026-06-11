@@ -10,8 +10,9 @@ permissions:
   contents: write
 
 jobs:
-  runs-on: ubuntu-latest
+  test:
+    runs-on: ubuntu-latest
 
-  steps:
+    steps:
     - name: echo env value
       run: echo ${{ env.env1 }}

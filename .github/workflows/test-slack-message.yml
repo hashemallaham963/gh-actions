@@ -4,15 +4,16 @@ on:
   workflow_dispatch
 
 jobs:
-  runs-on: ubuntu-latest
-  steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Send to slack
-      uses: hashemallaham963/gh-actions/send-slack-message@v1
-      with:
-        webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
-        username: "Bot"
-        message: |
-          ✅ Test integration message by Hashem, skip it.
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Send to slack
+        uses: hashemallaham963/gh-actions/send-slack-message@v1
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          username: "Bot"
+          message: |
+            ✅ Test integration message by Hashem, skip it.
