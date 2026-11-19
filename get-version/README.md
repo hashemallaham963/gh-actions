@@ -2,22 +2,29 @@
 
 A GitHub composite action that extracts a semantic version from the current Git context. Supports two modes to handle different release workflows.
 
-## Usage
+## Usage and the required permissions
 
 ```yaml
-steps:
-  - uses: actions/checkout@v4
-    with:
-      fetch-depth: 0   # required — fetches full tag history
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read  # REQUIRED for hashemallaham963/gh-actions/get-version
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # required to fetches full tag history for hashemallaham963/gh-actions/get-version
 
-  - name: Get version
-    id: ver
-    uses: hashemallaham963/gh-actions/get-version@main
-    with:
-      mode: advanced   # optional, default: advanced
+      - name: Get version
+        id: ver
+        uses: hashemallaham963/gh-actions/get-version@main
+        with:
+          mode: advanced   # optional, default: advanced
 
-  - run: echo "Releasing v${{ steps.ver.outputs.version }}"
+      - run: echo "Releasing v${{ steps.ver.outputs.version }}"
 ```
+
+Without this permission, the action will fail with a clear error message instead of silently falling back to a timestamp version.
 
 ## Inputs
 
@@ -77,10 +84,12 @@ All modes strip common prefixes (`v`, `release-`, `rel-`) and normalize to bare 
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read  # REQUIRED for hashemallaham963/gh-actions/get-version
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0 # REQUIRED
 
       - name: Extract version
         id: ver
@@ -93,3 +102,5 @@ jobs:
 ```
 
 > **Note:** `fetch-depth: 0` is required on the checkout step. Without it, `git fetch --tags` may not resolve tags correctly on shallow clones.
+>
+> **Note:** The workflow job must have `permissions: contents: read` for the GitHub API calls to work. See [Required Permissions](#required-permissions) above.

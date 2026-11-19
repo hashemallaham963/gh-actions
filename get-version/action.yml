@@ -37,35 +37,56 @@ runs:
         # with branch / latest-release / timestamp fallbacks.
         # ─────────────────────────────────────────────
         simple() {
-          BRANCH_NAME="${{ github.ref_name }}"
-          echo "Source branch: $BRANCH_NAME"
-
-          COMMIT_SHA="${{ github.sha }}"
-          echo "Source commit: $COMMIT_SHA"
-
           git fetch --tags
 
+          BRANCH_NAME="${{ github.ref_name }}"
+          COMMIT_SHA="${{ github.sha }}"
           TAG_NAME=$(git tag --points-at $COMMIT_SHA | sort -V | tail -1)
+
+          echo "Source branch: $BRANCH_NAME"
+          echo "Source commit: $COMMIT_SHA"
           echo "Found tag: $TAG_NAME"
 
+          # initial VERSION value
           VERSION=""
 
           if [ -n "$TAG_NAME" ]; then
+            # e.g: v1.2.3 --> 1.2.3
             VERSION=$(echo "$TAG_NAME" | sed -E 's/^(v|release-|rel-)?([0-9]+\.[0-9]+\.[0-9]+).*$/\2/')
             echo "Version from tag: $VERSION"
           fi
 
           if [ -z "$VERSION" ] && [[ "$BRANCH_NAME" =~ release|rel ]]; then
+            # e.g: release-1.2.3 --> 1.2.3
+            # e.g: rel-2.3.4 --> 2.3.4
+            # e.g: release-v1.2.3 --> 1.2.3
+            # e.g: release/v1.2.3 --> 1.2.3
             VERSION=$(echo "$BRANCH_NAME" | sed -E 's/.*([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
             echo "Version from branch: $VERSION"
           fi
 
           if [ -z "$VERSION" ]; then
             echo "Checking latest GitHub release..."
-            LATEST_RELEASE=$(curl -s "https://api.github.com/repos/${{ github.repository }}/releases/latest" | jq -r '.tag_name // empty')
-            if [ -n "$LATEST_RELEASE" ]; then
-              VERSION=$(echo "$LATEST_RELEASE" | sed -E 's/^(v|release-|rel-)?([0-9]+\.[0-9]+\.[0-9]+).*$/\2/')
-              echo "Version from latest release: $VERSION"
+            # Use GITHUB_TOKEN for authenticated API call (requires contents: read permission)
+            API_URL="https://api.github.com/repos/${{ github.repository }}/releases/latest"
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer ${{ github.token }}" "$API_URL")
+            if [ "$HTTP_CODE" = "403" ]; then
+              echo "❌ GitHub API returned 403 Forbidden."
+              echo "   This action requires 'permissions: contents: read' on the workflow job."
+              echo "   Add this to your workflow:"
+              echo "     permissions:"
+              echo "       contents: read"
+              exit 1
+            elif [ "$HTTP_CODE" = "404" ]; then
+              echo "   No releases found (404), continuing to next fallback..."
+            elif [ "$HTTP_CODE" != "200" ]; then
+              echo "⚠️ GitHub API returned HTTP $HTTP_CODE, continuing to next fallback..."
+            else
+              LATEST_RELEASE=$(curl -s -H "Authorization: Bearer ${{ github.token }}" "$API_URL" | jq -r '.tag_name // empty')
+              if [ -n "$LATEST_RELEASE" ]; then
+                VERSION=$(echo "$LATEST_RELEASE" | sed -E 's/^(v|release-|rel-)?([0-9]+\.[0-9]+\.[0-9]+).*$/\2/')
+                echo "Version from latest release: $VERSION"
+              fi
             fi
           fi
 
@@ -131,10 +152,26 @@ runs:
 
           if [ -z "$VERSION" ]; then
             echo "Checking latest GitHub release..."
-            LATEST_RELEASE=$(curl -s "https://api.github.com/repos/${{ github.repository }}/releases/latest" | jq -r '.tag_name // empty')
-            if [ -n "$LATEST_RELEASE" ]; then
-              VERSION=$(echo "$LATEST_RELEASE" | sed -E 's/^(v|release-|rel-)?([0-9]+\.[0-9]+\.[0-9]+).*$/\2/')
-              echo "Version from latest release: $VERSION"
+            # Use GITHUB_TOKEN for authenticated API call (requires contents: read permission)
+            API_URL="https://api.github.com/repos/${{ github.repository }}/releases/latest"
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer ${{ github.token }}" "$API_URL")
+            if [ "$HTTP_CODE" = "403" ]; then
+              echo "❌ GitHub API returned 403 Forbidden."
+              echo "   This action requires 'permissions: contents: read' on the workflow job."
+              echo "   Add this to your workflow:"
+              echo "     permissions:"
+              echo "       contents: read"
+              exit 1
+            elif [ "$HTTP_CODE" = "404" ]; then
+              echo "   No releases found (404), continuing to next fallback..."
+            elif [ "$HTTP_CODE" != "200" ]; then
+              echo "⚠️ GitHub API returned HTTP $HTTP_CODE, continuing to next fallback..."
+            else
+              LATEST_RELEASE=$(curl -s -H "Authorization: Bearer ${{ github.token }}" "$API_URL" | jq -r '.tag_name // empty')
+              if [ -n "$LATEST_RELEASE" ]; then
+                VERSION=$(echo "$LATEST_RELEASE" | sed -E 's/^(v|release-|rel-)?([0-9]+\.[0-9]+\.[0-9]+).*$/\2/')
+                echo "Version from latest release: $VERSION"
+              fi
             fi
           fi
 
