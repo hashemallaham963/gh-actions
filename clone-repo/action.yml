@@ -29,13 +29,6 @@ inputs:
     default: "main"
   
 
-# Outputs:
-outputs:
-  status:
-    description: 'Status of the operation'
-    value: ${{ steps.clone.outputs.status }}
-
-
 # Logic
 runs:
   using: "composite"
@@ -45,7 +38,7 @@ runs:
       shell: bash
       run: |
         echo "install dependencies"
-        # check if git is installed on runner
+        # check if git is installed on the runner
         if ! command -v git >/dev/null 2>&1; then
             echo "Installing git..."
             sudo apt update
@@ -57,6 +50,7 @@ runs:
       id: clone
       shell: bash
       env:
+        # translate action's input into step's environment variables
         REPOSITORY_URL: ${{ inputs.repository_url }}
         TOKEN: ${{ inputs.token }}
         DEPTH: ${{ inputs.depth }}
@@ -64,6 +58,7 @@ runs:
       run: |
         echo ""
 
+        # when an 'ERR' occurs, store 'failed' in ${{ steps.clone.outputs.status }} --> the output 'status' will have 'failed' value
         trap 'echo "status=failed" >> "$GITHUB_OUTPUT"' ERR
 
         echo "Cloning repository..."
@@ -71,18 +66,26 @@ runs:
         echo "Branch: $BRANCH"
         echo "Depth: $DEPTH"
 
+        REPOSITORY_URL_WITHOUT_HTTPS_PREFIX=${REPOSITORY_URL#https://}
+
+        # no branch is passed in inputs --> fallback to 'main' as a default value
+        if [ -z "$BRANCH" ]; then
+          BRANCH="main"
+        fi
+
+        # a token is passed in the inputs --> use it with auth, otherwise clone without auth
         if [ -n "$TOKEN" ]; then
-          AUTH_URL="https://x-access-token:${TOKEN}@${REPOSITORY_URL#https://}"
+          URL="https://x-access-token:${TOKEN}@${REPOSITORY_URL_WITHOUT_HTTPS_PREFIX}"
         else
-          AUTH_URL="$REPOSITORY_URL"
+          URL="$REPOSITORY_URL"
         fi
 
         # === cloning:
         git clone \
         --depth ${{ inputs.depth }} \
         --single-branch \
-        --branch main \
-        "$AUTH_URL"
+        --branch $BRANCH \
+        "$URL"
 
 
         # === validation:
@@ -101,3 +104,9 @@ runs:
           echo "❌ failed"
           echo "status=failed" >> "$GITHUB_OUTPUT"
         fi
+
+# Outputs:
+outputs:
+  status:
+    description: 'Status of the operation'
+    value: ${{ steps.clone.outputs.status }}
