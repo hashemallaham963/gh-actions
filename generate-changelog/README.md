@@ -1,4 +1,4 @@
-# `changelog-from-commits` — Generate a Changelog
+# `generate-changelog` — Generate a Changelog
 
 A minimal GitHub composite action that turns a range of Git commits into a markdown bullet list.
 
@@ -25,7 +25,7 @@ jobs:
 
       - name: Generate changelog
         id: notes
-        uses: hashemallaham963/gh-actions/changelog-from-commits@main
+        uses: hashemallaham963/gh-actions/generate-changelog@main
 
       - name: Use it
         run: echo "${{ steps.notes.outputs.changelog }}"
@@ -77,7 +77,7 @@ jobs:
           fetch-depth: 0
 
       - id: notes
-        uses: hashemallaham963/gh-actions/changelog-from-commits@main
+        uses: hashemallaham963/gh-actions/generate-changelog@main
 
       - run: echo "Asset: ${{ steps.notes.outputs.asset_url }}"
 ```
@@ -87,7 +87,7 @@ The action detects `release` + `created` itself; no input is needed to enable th
 ### Explicit range
 
 ```yaml
-- uses: hashemallaham963/gh-actions/changelog-from-commits@main
+- uses: hashemallaham963/gh-actions/generate-changelog@main
   with:
     from: v1.0.0
     to: v1.1.0
@@ -105,7 +105,7 @@ Produces something like:
 ```yaml
 - name: Generate changelog
   id: notes
-  uses: hashemallaham963/gh-actions/changelog-from-commits@main
+  uses: hashemallaham963/gh-actions/generate-changelog@main
 
 - name: Notify
   uses: hashemallaham963/gh-actions/send-slack-notification@main

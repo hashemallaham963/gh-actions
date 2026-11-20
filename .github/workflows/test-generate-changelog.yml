@@ -1,4 +1,4 @@
-name: test changelog from commits
+name: test generate changelog
 
 on:
   workflow_dispatch:
@@ -19,8 +19,8 @@ jobs:
 
       - name: Test the action
         id: changelog
-        uses: hashemallaham963/gh-actions/changelog-from-commits@main
-        # uses: ./changelog-from-commits
+        uses: hashemallaham963/gh-actions/generate-changelog@main
+        # uses: ./generate-changelog
 
       - name: Show outputs
         env:

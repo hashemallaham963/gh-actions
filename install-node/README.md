@@ -1,4 +1,4 @@
-# `install-node-deps` — Install Node.js and Project Dependencies
+# `install-node` — Install Node.js and Project Dependencies
 
 A composite action that sets up Node.js/npm and installs dependencies with `npm ci` when `package-lock.json` exists, falling back to `npm install` from `package.json` when it doesn't.
 
@@ -11,7 +11,7 @@ steps:
 
   - name: Install dependencies
     id: deps
-    uses: hashemallaham963/gh-actions/install-node-deps@main
+    uses: hashemallaham963/gh-actions/install-node@main
 
   - name: Show versions
     run: echo "${{ steps.deps.outputs.node_version }} / ${{ steps.deps.outputs.npm_version }}"
@@ -48,7 +48,7 @@ steps:
 ### Different Node version
 
 ```yaml
-- uses: hashemallaham963/gh-actions/install-node-deps@main
+- uses: hashemallaham963/gh-actions/install-node@main
   with:
     node-version: '18'
 ```
@@ -56,7 +56,7 @@ steps:
 ### Monorepo package directory
 
 ```yaml
-- uses: hashemallaham963/gh-actions/install-node-deps@main
+- uses: hashemallaham963/gh-actions/install-node@main
   with:
     working-directory: packages/web
 ```
@@ -66,7 +66,7 @@ steps:
 ```yaml
 - name: Install
   id: deps
-  uses: hashemallaham963/gh-actions/install-node-deps@main
+  uses: hashemallaham963/gh-actions/install-node@main
 
 - name: Verify
   run: |

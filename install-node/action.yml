@@ -1,5 +1,5 @@
 # Information:
-name: install node dependencies
+name: install node
 description: "Set up Node.js and npm, then install dependencies from package-lock.json or package.json"
 branding:
   icon: 'message-square'

@@ -1,5 +1,5 @@
 # Information:
-name: changelog from commits
+name: generate changelog
 description: "Generate a markdown changelog from Git commit messages"
 branding:
   icon: 'message-square'

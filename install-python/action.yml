@@ -1,0 +1,127 @@
+# Information:
+name: install python
+description: "Set up Python and pip, then install dependencies from requirements.txt or the project metadata"
+branding:
+  icon: 'message-square'
+  color: 'blue'
+
+# Inputs:
+inputs:
+  python-version:
+    description: 'Python version to install'
+    required: false
+    default: '3.11'
+  working-directory:
+    description: 'Directory containing requirements.txt or pyproject.toml'
+    required: false
+    default: '.'
+  cache:
+    description: 'Enable pip caching (only applies when a dependency file exists)'
+    required: false
+    default: 'true'
+
+
+# Logic:
+runs:
+  using: "composite"
+  steps:
+    - name: detect dependency file
+      id: detect
+      shell: bash
+      env:
+        WORKING_DIRECTORY: ${{ inputs.working-directory }}
+        CACHE: ${{ inputs.cache }}
+      run: |
+        DEP_FILE=""
+        MODE=""
+
+        if [ -f "$WORKING_DIRECTORY/requirements.txt" ]; then
+          DEP_FILE="requirements.txt"
+          MODE="requirements"
+        elif [ -f "$WORKING_DIRECTORY/pyproject.toml" ]; then
+          DEP_FILE="pyproject.toml"
+          MODE="pyproject"
+        elif [ -f "$WORKING_DIRECTORY/setup.py" ]; then
+          DEP_FILE="setup.py"
+          MODE="setup.py"
+        fi
+
+        echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+        if [ -n "$DEP_FILE" ]; then
+          echo "path=$WORKING_DIRECTORY/$DEP_FILE" >> "$GITHUB_OUTPUT"
+          if [ "$CACHE" = "true" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "✅ pip caching enabled ($DEP_FILE)"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "ℹ️ pip caching disabled by input"
+          fi
+        else
+          echo "enabled=false" >> "$GITHUB_OUTPUT"
+          echo "ℹ️ No requirements.txt, pyproject.toml, or setup.py found"
+        fi
+
+    - name: setup python
+      id: setup
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+        cache: ${{ steps.detect.outputs.enabled == 'true' && 'pip' || '' }}
+        cache-dependency-path: ${{ steps.detect.outputs.enabled == 'true' && steps.detect.outputs.path || '' }}
+
+    - name: install dependencies
+      id: install
+      shell: bash
+      env:
+        WORKING_DIRECTORY: ${{ inputs.working-directory }}
+        MODE: ${{ steps.detect.outputs.mode }}
+      run: |
+        set -e
+        trap 'echo "status=failed" >> "$GITHUB_OUTPUT"' ERR
+
+        if [ ! -d "$WORKING_DIRECTORY" ]; then
+          echo "❌ Working directory not found: $WORKING_DIRECTORY"
+          echo "status=failed" >> "$GITHUB_OUTPUT"
+          exit 1
+        fi
+        cd "$WORKING_DIRECTORY"
+
+        case "$MODE" in
+          requirements)
+            echo "📦 Installing from requirements.txt"
+            python -m pip install -r requirements.txt
+            ;;
+          pyproject|setup.py)
+            echo "📦 Installing project from $MODE"
+            python -m pip install .
+            ;;
+          *)
+            echo "❌ No requirements.txt, pyproject.toml, or setup.py found in $WORKING_DIRECTORY"
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+            exit 1
+            ;;
+        esac
+
+        echo "python_version=$(python --version)" >> "$GITHUB_OUTPUT"
+        echo "pip_version=$(python -m pip --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+        echo "status=success" >> "$GITHUB_OUTPUT"
+
+        echo "✅ Dependencies installed"
+
+# Outputs:
+outputs:
+  status:
+    description: 'Status of the operation'
+    value: ${{ steps.install.outputs.status }}
+  mode:
+    description: 'Source used: requirements, pyproject, or setup.py (empty if none found)'
+    value: ${{ steps.detect.outputs.mode }}
+  python_version:
+    description: 'Installed Python version'
+    value: ${{ steps.install.outputs.python_version }}
+  pip_version:
+    description: 'Installed pip version'
+    value: ${{ steps.install.outputs.pip_version }}
+  cache_enabled:
+    description: 'Whether pip caching was enabled for this run'
+    value: ${{ steps.detect.outputs.enabled }}
