@@ -1,0 +1,209 @@
+# Information:
+name: build docker image
+description: "Build a Docker image with Buildx using configurable builder, platforms, tags, load and output options"
+branding:
+  icon: 'message-square'
+  color: 'blue'
+
+# Inputs:
+inputs:
+  working-directory:
+    description: 'Directory to enter before running the build'
+    required: false
+    default: '.'
+  context:
+    description: 'Build context path passed to buildx (relative to working-directory)'
+    required: false
+    default: '.'
+  dockerfile:
+    description: 'Path to the Dockerfile (relative to the build context); empty uses Dockerfile'
+    required: false
+    default: ''
+  builder-name:
+    description: 'Name of the Buildx builder to create or reuse'
+    required: false
+    default: 'gh-actions-builder'
+  driver:
+    description: 'Buildx driver used when creating the builder'
+    required: false
+    default: 'docker-container'
+  platforms:
+    description: 'Comma-separated target platforms (e.g. linux/amd64,linux/arm64)'
+    required: false
+    default: 'linux/amd64'
+  tags:
+    description: 'Image tag(s) to apply, one per line (e.g. my-app:latest)'
+    required: true
+  build-args:
+    description: 'Build arguments, one KEY=VALUE per line'
+    required: false
+    default: ''
+  target:
+    description: 'Target build stage in the Dockerfile'
+    required: false
+    default: ''
+  load:
+    description: 'Load a single-platform result into the local Docker daemon'
+    required: false
+    default: 'true'
+  push:
+    description: 'Push the result to the registry'
+    required: false
+    default: 'false'
+  output:
+    description: 'Buildx --output value (e.g. type=image); empty omits the flag'
+    required: false
+    default: 'type=image'
+  no-cache:
+    description: 'Disable the build cache'
+    required: false
+    default: 'false'
+  progress:
+    description: 'Buildx progress output mode (auto, plain, quiet, none, rawjson, tty)'
+    required: false
+    default: 'auto'
+
+
+# Logic:
+runs:
+  using: "composite"
+  steps:
+    - name: build image
+      id: build
+      shell: bash
+      env:
+        WORKING_DIRECTORY: ${{ inputs.working-directory }}
+        CONTEXT: ${{ inputs.context }}
+        DOCKERFILE: ${{ inputs.dockerfile }}
+        BUILDER_NAME: ${{ inputs.builder-name }}
+        DRIVER: ${{ inputs.driver }}
+        PLATFORMS: ${{ inputs.platforms }}
+        TAGS: ${{ inputs.tags }}
+        BUILD_ARGS_INPUT: ${{ inputs.build-args }}
+        TARGET: ${{ inputs.target }}
+        LOAD: ${{ inputs.load }}
+        PUSH: ${{ inputs.push }}
+        OUTPUT: ${{ inputs.output }}
+        NO_CACHE: ${{ inputs.no-cache }}
+        PROGRESS: ${{ inputs.progress }}
+      run: |
+        set -e
+        trap 'echo "status=failed" >> "$GITHUB_OUTPUT"' ERR
+
+        if [ ! -d "$WORKING_DIRECTORY" ]; then
+          echo "❌ Working directory not found: $WORKING_DIRECTORY"
+          echo "status=failed" >> "$GITHUB_OUTPUT"
+          exit 1
+        fi
+
+        if [ -z "$TAGS" ]; then
+          echo "❌ No image tags provided"
+          echo "status=failed" >> "$GITHUB_OUTPUT"
+          exit 1
+        fi
+
+        if [ "$LOAD" = "true" ] && [ "$PUSH" = "true" ]; then
+          echo "❌ load and push cannot both be true"
+          echo "status=failed" >> "$GITHUB_OUTPUT"
+          exit 1
+        fi
+
+        if ! command -v docker >/dev/null 2>&1; then
+          echo "❌ docker command not found — run install-docker first"
+          echo "status=failed" >> "$GITHUB_OUTPUT"
+          exit 1
+        fi
+
+        if docker buildx inspect "$BUILDER_NAME" >/dev/null 2>&1; then
+          echo "♻️ Reusing Buildx builder: $BUILDER_NAME"
+        else
+          echo "🔨 Creating Buildx builder: $BUILDER_NAME ($DRIVER)"
+          docker buildx create --name "$BUILDER_NAME" --driver "$DRIVER"
+        fi
+
+        cd "$WORKING_DIRECTORY"
+
+        if [ ! -e "$CONTEXT" ]; then
+          echo "❌ Build context not found: $WORKING_DIRECTORY/$CONTEXT"
+          echo "status=failed" >> "$GITHUB_OUTPUT"
+          exit 1
+        fi
+
+        ARGS=()
+        if [ -n "$PLATFORMS" ]; then
+          ARGS+=(--platform "$PLATFORMS")
+        fi
+
+        FIRST_TAG=""
+        while IFS= read -r tag; do
+          if [ -z "$tag" ]; then
+            continue
+          fi
+          if [ -z "$FIRST_TAG" ]; then
+            FIRST_TAG="$tag"
+          fi
+          ARGS+=(--tag "$tag")
+        done <<< "$TAGS"
+
+        while IFS= read -r arg; do
+          if [ -n "$arg" ]; then
+            ARGS+=(--build-arg "$arg")
+          fi
+        done <<< "$BUILD_ARGS_INPUT"
+
+        if [ -n "$DOCKERFILE" ]; then
+          ARGS+=(--file "$DOCKERFILE")
+        fi
+        if [ -n "$TARGET" ]; then
+          ARGS+=(--target "$TARGET")
+        fi
+        if [ "$NO_CACHE" = "true" ]; then
+          ARGS+=(--no-cache)
+        fi
+        if [ -n "$PROGRESS" ]; then
+          ARGS+=(--progress "$PROGRESS")
+        fi
+        if [ "$LOAD" = "true" ]; then
+          ARGS+=(--load)
+        fi
+        if [ "$PUSH" = "true" ]; then
+          ARGS+=(--push)
+        fi
+        if [ -n "$OUTPUT" ]; then
+          ARGS+=(--output "$OUTPUT")
+        fi
+        ARGS+=("$CONTEXT")
+
+        echo "🐳 Building $FIRST_TAG for $PLATFORMS (builder: $BUILDER_NAME, context: $CONTEXT)"
+        docker buildx build "${ARGS[@]}"
+
+        IMAGE_ID=""
+        if [ "$LOAD" = "true" ]; then
+          IMAGE_ID="$(docker image inspect --format '{{.Id}}' "$FIRST_TAG" 2>/dev/null || true)"
+        fi
+
+        echo "image=$FIRST_TAG" >> "$GITHUB_OUTPUT"
+        echo "image_id=$IMAGE_ID" >> "$GITHUB_OUTPUT"
+        echo "platforms=$PLATFORMS" >> "$GITHUB_OUTPUT"
+        echo "builder_name=$BUILDER_NAME" >> "$GITHUB_OUTPUT"
+        echo "status=success" >> "$GITHUB_OUTPUT"
+
+        echo "✅ Image built: $FIRST_TAG"
+
+# Outputs:
+outputs:
+  status:
+    description: 'Status of the operation'
+    value: ${{ steps.build.outputs.status }}
+  image:
+    description: 'First image tag applied to the build'
+    value: ${{ steps.build.outputs.image }}
+  image_id:
+    description: 'Local image ID when load is true; empty otherwise'
+    value: ${{ steps.build.outputs.image_id }}
+  platforms:
+    description: 'Target platforms used for the build'
+    value: ${{ steps.build.outputs.platforms }}
+  builder_name:
+    description: 'Name of the Buildx builder used'
+    value: ${{ steps.build.outputs.builder_name }}
