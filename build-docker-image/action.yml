@@ -73,6 +73,14 @@ runs:
           exit 1
         fi
 
+        CACHE_REF="${CACHE_REF#"${CACHE_REF%%[![:space:]]*}"}"
+        CACHE_REF="${CACHE_REF%"${CACHE_REF##*[![:space:]]}"}"
+        if [[ "$CACHE_REF" =~ [[:space:]] ]]; then
+          echo "❌ cache-ref must not contain whitespace: $CACHE_REF"
+          echo "status=failed" >> "$GITHUB_OUTPUT"
+          exit 1
+        fi
+
         cd "$WORKING_DIRECTORY"
 
         if [ ! -e "$CONTEXT" ]; then
@@ -87,15 +95,28 @@ runs:
         fi
 
         FIRST_TAG=""
-        while IFS= read -r tag; do
+        while IFS= read -r tag || [ -n "$tag" ]; do
+          tag="${tag#"${tag%%[![:space:]]*}"}"
+          tag="${tag%"${tag##*[![:space:]]}"}"
           if [ -z "$tag" ]; then
             continue
+          fi
+          if [[ "$tag" =~ [[:space:]] ]]; then
+            echo "❌ Image tag must not contain whitespace: $tag"
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+            exit 1
           fi
           if [ -z "$FIRST_TAG" ]; then
             FIRST_TAG="$tag"
           fi
           ARGS+=(--tag "$tag")
         done <<< "$TAGS"
+
+        if [ -z "$FIRST_TAG" ]; then
+          echo "❌ No image tags provided"
+          echo "status=failed" >> "$GITHUB_OUTPUT"
+          exit 1
+        fi
 
         if [ -n "$CACHE_REF" ]; then
           ARGS+=(--cache-from "type=registry,ref=$CACHE_REF")

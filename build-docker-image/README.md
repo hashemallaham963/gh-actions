@@ -46,9 +46,9 @@ steps:
 ## Behavior
 
 1. Validates `working-directory`, `tags`, the build `context`, and the presence of `docker`.
-2. Enters `working-directory` and assembles `docker buildx build` from the input values.
+2. Enters `working-directory` and assembles `docker buildx build` from the input values. Blank `tags` lines are ignored; leading/trailing whitespace in tags and `cache-ref` is trimmed, and internal whitespace is rejected.
 3. When `cache-ref` is set, adds `--cache-from type=registry,ref=<cache-ref>` and `--cache-to type=registry,ref=<cache-ref>,mode=max`.
-4. Writes `image` (the first tag) and `status`, including `status=failed` on error.
+4. Writes `image` (the first non-empty tag) and `status`, including `status=failed` on error.
 
 Use fully qualified tags such as `ghcr.io/org/app:latest` if `publish-docker-image` will push the result. A local-only tag like `my-app:latest` cannot be pushed to GHCR without retagging.
 
