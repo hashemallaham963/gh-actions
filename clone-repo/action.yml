@@ -14,9 +14,9 @@ inputs:
     required: true
 
   token:
-    description: 'The access token, e.g: PAT'
+    description: 'The access token, e.g: PAT. Leave empty for public repositories'
     required: false
-    default: "dummytoken-to-enable-public-repo-clone"
+    default: ''
 
   depth:
     description: 'The depth of the clone'
@@ -56,54 +56,47 @@ runs:
         DEPTH: ${{ inputs.depth }}
         BRANCH: ${{ inputs.branch }}
       run: |
-        echo ""
-
-        # when an 'ERR' occurs, store 'failed' in ${{ steps.clone.outputs.status }} --> the output 'status' will have 'failed' value
+        set -e
         trap 'echo "status=failed" >> "$GITHUB_OUTPUT"' ERR
 
-        echo "Cloning repository..."
-        echo "URL: $REPOSITORY_URL"
-        echo "Branch: $BRANCH"
-        echo "Depth: $DEPTH"
+        if [ -z "$REPOSITORY_URL" ]; then
+          echo "❌ repository_url is required"
+          echo "status=failed" >> "$GITHUB_OUTPUT"
+          exit 1
+        fi
 
-        REPOSITORY_URL_WITHOUT_HTTPS_PREFIX=${REPOSITORY_URL#https://}
-
-        # no branch is passed in inputs --> fallback to 'main' as a default value
         if [ -z "$BRANCH" ]; then
           BRANCH="main"
         fi
 
-        # a token is passed in the inputs --> use it with auth, otherwise clone without auth
         if [ -n "$TOKEN" ]; then
+          REPOSITORY_URL_WITHOUT_HTTPS_PREFIX="${REPOSITORY_URL#https://}"
           URL="https://x-access-token:${TOKEN}@${REPOSITORY_URL_WITHOUT_HTTPS_PREFIX}"
         else
           URL="$REPOSITORY_URL"
         fi
 
-        # === cloning:
-        git clone \
-        --depth ${{ inputs.depth }} \
-        --single-branch \
-        --branch $BRANCH \
-        "$URL"
-
-
-        # === validation:
-        echo "🤔 Validating..."
-        echo "Current working directory: $(pwd)"
-        
-        echo "Listing files:"
-        echo "--------------"
-        ls -la
-
-        exitstatus=$?
-        if [ $exitstatus = 0 ]; then
-          echo "✅ success"
-          echo "status=success" >> "$GITHUB_OUTPUT"
-        else
-          echo "❌ failed"
-          echo "status=failed" >> "$GITHUB_OUTPUT"
+        DEPTH_ARGS=()
+        if [ -n "$DEPTH" ]; then
+          if ! [[ "$DEPTH" =~ ^[0-9]+$ ]]; then
+            echo "❌ depth must be a number or empty: $DEPTH"
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          if [ "$DEPTH" != "0" ]; then
+            DEPTH_ARGS=(--depth "$DEPTH")
+          fi
         fi
+
+        echo "Cloning repository..."
+        echo "URL: $REPOSITORY_URL"
+        echo "Branch: $BRANCH"
+        echo "Depth: ${DEPTH:-full}"
+
+        git clone "${DEPTH_ARGS[@]}" --single-branch --branch "$BRANCH" "$URL"
+
+        echo "✅ Clone completed"
+        echo "status=success" >> "$GITHUB_OUTPUT"
 
 # Outputs:
 outputs:

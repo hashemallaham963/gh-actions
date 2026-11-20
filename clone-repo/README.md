@@ -19,7 +19,7 @@ steps:
 | Input | Required | Default | Description |
 |-------|----------|---------|-------------|
 | `repository_url` | **Yes** | — | Full HTTPS URL of the repository to clone |
-| `token` | No | *(dummy — allows public repos)* | Personal access token (PAT) or `${{ secrets.GITHUB_TOKEN }}` for private repos |
+| `token` | No | *(empty)* | Personal access token (PAT) or `${{ secrets.GITHUB_TOKEN }}` for private repos; omit for public repos |
 | `branch` | No | `main` | Branch to clone |
 | `depth` | No | `1` | Shallow clone depth. Set to `0` for a full clone |
 
@@ -80,4 +80,5 @@ No token needed for public repos:
 - The action installs `git` automatically if it is not present on the runner.
 - The token is injected into the clone URL as `x-access-token` and is never logged.
 - The clone lands in the **current working directory** of the runner — set `working-directory` on the step or a prior `cd` if you need a specific path.
-- `depth: 1` (default) is a shallow clone. If you need the full history or tags, set `depth: 0`.
+- `depth: 1` (default) is a shallow clone. If you need the full history or tags, set `depth: 0`; the action then omits `--depth` entirely.
+- Invalid input or a failed `git clone` stops the step and sets `status=failed`.

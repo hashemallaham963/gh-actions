@@ -66,7 +66,7 @@ Fallback chain:
 
 ## Version normalization
 
-All modes strip common prefixes (`v`, `release-`, `rel-`) and normalize to bare `MAJOR.MINOR.PATCH`. If the result does not match the semver pattern, it falls back to `0.0.1`.
+All modes strip common prefixes (`v`, `release-v`, `release-`, `rel-v`, `rel-`) and normalize to bare `MAJOR.MINOR.PATCH`. If the result does not match the semver pattern, it falls back to `0.0.1`.
 
 ## Examples
 

@@ -30,22 +30,8 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: setup dependencies
-      id: step1
-      shell: bash
-      run: |
-        echo "install dependencies"
-        if command -v apt-get >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y curl
-        else
-            echo "❌ apt-get not found"
-            echo "status=failed" >> "$GITHUB_OUTPUT"
-            exit 1
-        fi
-
     - name: publish .deb file
-      id: step2
+      id: publish
       shell: bash
       env:
         REPOSITORY_URL: ${{ inputs.repository_url }}
@@ -54,26 +40,31 @@ runs:
         PACKAGE_PATH: ${{ inputs.package_path }}
         REPOSITORY_HOSTNAME: ${{ inputs.repository_hostname }}
       run: |
-        # fail-fast on any error
+        set -e
         trap 'echo "status=failed" >> "$GITHUB_OUTPUT"' ERR
 
-        # verify curl exists
-        if ! command -v curl &> /dev/null; then
-            echo "❌ curl is not installed"
+        # install curl only when it is missing
+        if ! command -v curl >/dev/null 2>&1; then
+          if ! command -v apt-get >/dev/null 2>&1; then
+            echo "❌ curl is not installed and apt-get is unavailable"
+            echo "status=failed" >> "$GITHUB_OUTPUT"
             exit 1
+          fi
+          echo "Installing curl..."
+          sudo apt-get update
+          sudo apt-get install -y curl
         fi
 
-        # verify package file exists
         if [[ ! -f "$PACKAGE_PATH" ]]; then
-            echo "❌ Package not found: $PACKAGE_PATH"
-            exit 1
+          echo "❌ Package not found: $PACKAGE_PATH"
+          echo "status=failed" >> "$GITHUB_OUTPUT"
+          exit 1
         fi
 
         echo "Publishing $PACKAGE_PATH to $REPOSITORY_URL"
 
-        # build curl command
         CURL_CMD=(
-          curl -sS -f --max-time 60
+          curl -sS --max-time 60
           -u "$REPOSITORY_USERNAME:$REPOSITORY_PASSWORD"
           -H "Content-Type: multipart/form-data"
           --data-binary "@$PACKAGE_PATH"
@@ -85,10 +76,10 @@ runs:
 
         CURL_CMD+=("$REPOSITORY_URL")
 
-        # execute and capture HTTP code
+        # curl returns 0 for HTTP errors, so check the code ourselves
         HTTP_CODE=$("${CURL_CMD[@]}" -w "%{http_code}" -o /dev/null)
 
-        if [[ "$HTTP_CODE" -ge 200 && "$HTTP_CODE" -lt 300 ]]; then
+        if [[ "$HTTP_CODE" =~ ^[0-9]+$ ]] && [[ "$HTTP_CODE" -ge 200 && "$HTTP_CODE" -lt 300 ]]; then
           echo "✅ Published successfully (HTTP $HTTP_CODE)"
           echo "status=success" >> "$GITHUB_OUTPUT"
         else
@@ -102,4 +93,4 @@ runs:
 outputs:
   status:
     description: 'Status of the action execution'
-    value: ${{ steps.step2.outputs.status }}
+    value: ${{ steps.publish.outputs.status }}

@@ -86,6 +86,7 @@ runs:
         if [ "$EVENT_NAME" = "release" ] && [ "$RELEASE_ACTION" = "created" ] && [ -n "$RELEASE_ID" ]; then
           if ! command -v curl >/dev/null 2>&1 || ! command -v jq >/dev/null 2>&1; then
             echo "❌ curl and jq are required to upload release assets"
+            echo "status=failed" >> "$GITHUB_OUTPUT"
             exit 1
           fi
 
