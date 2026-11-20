@@ -1,11 +1,9 @@
-
 # Information:
 name: publish to APT repository
-description: "Pushing .deb packages to SonaType Nexus APT repository"
+description: "Pushing .deb packages to Sonatype Nexus APT repository"
 branding:
   icon: 'message-square'
   color: 'blue'
-
 
 
 # Inputs:
@@ -24,17 +22,8 @@ inputs:
     description: 'The .deb file absolute path on the runner filesystem'
     required: true
   repository_hostname:
-    description: 'The domain name of the repositroy in case we used IP address in the repository_url input'
+    description: 'The domain name of the repository in case we used IP address in the repository_url input'
     required: false
-
-
-
-# Outputs:
-outputs:
-  status:
-    description: 'Status of the operation'
-    value: ${{ steps.step2.outputs.status }}
-
 
 
 # Logic:
@@ -46,35 +35,71 @@ runs:
       shell: bash
       run: |
         echo "install dependencies"
+        if command -v apt-get >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y curl
+        else
+            echo "❌ apt-get not found"
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+            exit 1
+        fi
 
     - name: publish .deb file
       id: step2
       shell: bash
       env:
-        repository_url: ${{ inputs.repository_url }}
-        repository_username: ${{ inputs.repository_username }}
-        repository_password: ${{ inputs.repository_password }}
-        package_path: ${{ inputs.package_path }}
-        repository_hostname: ${{ inputs.repository_hostname }}
+        REPOSITORY_URL: ${{ inputs.repository_url }}
+        REPOSITORY_USERNAME: ${{ inputs.repository_username }}
+        REPOSITORY_PASSWORD: ${{ inputs.repository_password }}
+        PACKAGE_PATH: ${{ inputs.package_path }}
+        REPOSITORY_HOSTNAME: ${{ inputs.repository_hostname }}
       run: |
-        echo "publish .deb file"
+        # fail-fast on any error
+        trap 'echo "status=failed" >> "$GITHUB_OUTPUT"' ERR
 
-        # check if curl is installed
+        # verify curl exists
         if ! command -v curl &> /dev/null; then
-            echo "curl is not installed. Please install curl first."
+            echo "❌ curl is not installed"
             exit 1
         fi
 
-        # publish .deb file
-        if [  -n $repository_hostname ]; then
-          curl -v -u $repository_username:$repository_password \
-          -H "Content-Type: multipart/form-data" \
-          --data-binary "@${{ inputs.package_path }}" $repository_url -H "Host: $repository_hostname"
+        # verify package file exists
+        if [[ ! -f "$PACKAGE_PATH" ]]; then
+            echo "❌ Package not found: $PACKAGE_PATH"
+            exit 1
+        fi
+
+        echo "Publishing $PACKAGE_PATH to $REPOSITORY_URL"
+
+        # build curl command
+        CURL_CMD=(
+          curl -sS -f --max-time 60
+          -u "$REPOSITORY_USERNAME:$REPOSITORY_PASSWORD"
+          -H "Content-Type: multipart/form-data"
+          --data-binary "@$PACKAGE_PATH"
+        )
+
+        if [[ -n "$REPOSITORY_HOSTNAME" ]]; then
+          CURL_CMD+=(-H "Host: $REPOSITORY_HOSTNAME")
+        fi
+
+        CURL_CMD+=("$REPOSITORY_URL")
+
+        # execute and capture HTTP code
+        HTTP_CODE=$("${CURL_CMD[@]}" -w "%{http_code}" -o /dev/null)
+
+        if [[ "$HTTP_CODE" -ge 200 && "$HTTP_CODE" -lt 300 ]]; then
+          echo "✅ Published successfully (HTTP $HTTP_CODE)"
+          echo "status=success" >> "$GITHUB_OUTPUT"
         else
-          # send without Host Header
-          curl -v -u $repository_username:$repository_password \
-          -H "Content-Type: multipart/form-data" \
-          --data-binary "@${{ inputs.package_path }}" $repository_url
+          echo "❌ Publish failed with HTTP $HTTP_CODE"
+          echo "status=failed" >> "$GITHUB_OUTPUT"
+          exit 1
+        fi
 
 
-        echo "status=success" >> "$GITHUB_OUTPUT"
+# Outputs:
+outputs:
+  status:
+    description: 'Status of the action execution'
+    value: ${{ steps.step2.outputs.status }}

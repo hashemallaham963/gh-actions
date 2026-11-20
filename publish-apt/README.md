@@ -14,6 +14,7 @@ steps:
       repository_username: ${{ secrets.NEXUS_USERNAME }}
       repository_password: ${{ secrets.NEXUS_PASSWORD }}
       package_path: /path/to/package_1.0.0_amd64.deb
+      repository_hostname: nexus.example.com # optional, see examples below
 ```
 
 ## Inputs
@@ -90,7 +91,11 @@ jobs:
 
 ## Notes
 
-- `curl` must be available on the runner. The action exits with an error if it is not found.
+- `curl` must be available on the runner. The action installs it via `apt` if missing.
 - Credentials are passed via HTTP basic auth and are never echoed to logs.
 - `package_path` must be an **absolute path** on the runner filesystem. Use `${{ github.workspace }}/...` to build it reliably.
 - `repository_hostname` is only needed when the `repository_url` contains an IP address. Omit it for standard domain-based URLs.
+- The action validates HTTP response codes: **2xx = success**, **non-2xx = failure** with clear error message.
+- On failure, the step exits with code 1 and outputs `status=failed`.
+- Includes 60-second timeout to prevent hanging on network issues.
+- Verifies `package_path` file exists before attempting upload.
