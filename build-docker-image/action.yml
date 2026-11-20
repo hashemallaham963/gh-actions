@@ -1,6 +1,6 @@
 # Information:
 name: build docker image
-description: "Build a Docker image with Buildx using parameterized platform, tags, load and output options"
+description: "Build a Docker image with Buildx using parameterized platform, tags, registry cache, load and output options"
 branding:
   icon: 'message-square'
   color: 'blue'
@@ -22,6 +22,10 @@ inputs:
   tags:
     description: 'Image tag(s) to apply, one per line; use fully qualified tags when publishing later'
     required: true
+  cache-ref:
+    description: 'Optional registry cache reference (e.g. ghcr.io/org/app:buildcache); enables registry cache import and export'
+    required: false
+    default: ''
   load:
     description: 'Load a single-platform result into the local Docker daemon'
     required: false
@@ -44,6 +48,7 @@ runs:
         CONTEXT: ${{ inputs.context }}
         PLATFORMS: ${{ inputs.platforms }}
         TAGS: ${{ inputs.tags }}
+        CACHE_REF: ${{ inputs.cache-ref }}
         LOAD: ${{ inputs.load }}
         OUTPUT: ${{ inputs.output }}
       run: |
@@ -92,6 +97,11 @@ runs:
           ARGS+=(--tag "$tag")
         done <<< "$TAGS"
 
+        if [ -n "$CACHE_REF" ]; then
+          ARGS+=(--cache-from "type=registry,ref=$CACHE_REF")
+          ARGS+=(--cache-to "type=registry,ref=$CACHE_REF,mode=max")
+        fi
+
         if [ "$LOAD" = "true" ]; then
           ARGS+=(--load)
         fi
@@ -101,6 +111,9 @@ runs:
         ARGS+=("$CONTEXT")
 
         echo "🐳 Building $FIRST_TAG for $PLATFORMS (context: $CONTEXT)"
+        if [ -n "$CACHE_REF" ]; then
+          echo "📦 Using registry cache: $CACHE_REF"
+        fi
         docker buildx build "${ARGS[@]}"
 
         echo "image=$FIRST_TAG" >> "$GITHUB_OUTPUT"
