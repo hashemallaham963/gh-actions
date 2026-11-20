@@ -1,0 +1,107 @@
+# Information:
+name: install node dependencies
+description: "Set up Node.js and npm, then install dependencies from package-lock.json or package.json"
+branding:
+  icon: 'message-square'
+  color: 'blue'
+
+# Inputs:
+inputs:
+  node-version:
+    description: 'Node.js version to install'
+    required: false
+    default: '20'
+  working-directory:
+    description: 'Directory containing package.json'
+    required: false
+    default: '.'
+  cache:
+    description: 'Enable npm caching (only applies when package-lock.json exists)'
+    required: false
+    default: 'true'
+
+
+# Logic:
+runs:
+  using: "composite"
+  steps:
+    - name: detect lockfile
+      id: detect
+      shell: bash
+      env:
+        WORKING_DIRECTORY: ${{ inputs.working-directory }}
+        CACHE: ${{ inputs.cache }}
+      run: |
+        if [ "$CACHE" = "true" ] && [ -f "$WORKING_DIRECTORY/package-lock.json" ]; then
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
+          echo "path=$WORKING_DIRECTORY/package-lock.json" >> "$GITHUB_OUTPUT"
+          echo "✅ npm caching enabled"
+        else
+          echo "enabled=false" >> "$GITHUB_OUTPUT"
+          echo "ℹ️ npm caching skipped"
+        fi
+
+    - name: setup node
+      id: setup
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: ${{ steps.detect.outputs.enabled == 'true' && 'npm' || '' }}
+        cache-dependency-path: ${{ steps.detect.outputs.enabled == 'true' && steps.detect.outputs.path || '' }}
+
+    - name: install dependencies
+      id: install
+      shell: bash
+      env:
+        WORKING_DIRECTORY: ${{ inputs.working-directory }}
+      run: |
+        set -e
+        trap 'echo "status=failed" >> "$GITHUB_OUTPUT"' ERR
+
+        if [ ! -d "$WORKING_DIRECTORY" ]; then
+          echo "❌ Working directory not found: $WORKING_DIRECTORY"
+          echo "status=failed" >> "$GITHUB_OUTPUT"
+          exit 1
+        fi
+        cd "$WORKING_DIRECTORY"
+
+        if [ ! -f package.json ]; then
+          echo "❌ package.json not found in $WORKING_DIRECTORY"
+          echo "status=failed" >> "$GITHUB_OUTPUT"
+          exit 1
+        fi
+
+        if [ -f package-lock.json ]; then
+          echo "📦 Installing from package-lock.json (npm ci)"
+          npm ci
+          MODE="ci"
+        else
+          echo "📦 No package-lock.json — installing from package.json (npm install)"
+          npm install
+          MODE="install"
+        fi
+
+        echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+        echo "node_version=$(node --version)" >> "$GITHUB_OUTPUT"
+        echo "npm_version=$(npm --version)" >> "$GITHUB_OUTPUT"
+        echo "status=success" >> "$GITHUB_OUTPUT"
+
+        echo "✅ Dependencies installed"
+
+# Outputs:
+outputs:
+  status:
+    description: 'Status of the operation'
+    value: ${{ steps.install.outputs.status }}
+  mode:
+    description: 'Install mode used: ci or install'
+    value: ${{ steps.install.outputs.mode }}
+  node_version:
+    description: 'Installed Node.js version'
+    value: ${{ steps.install.outputs.node_version }}
+  npm_version:
+    description: 'Installed npm version'
+    value: ${{ steps.install.outputs.npm_version }}
+  cache_enabled:
+    description: 'Whether npm caching was enabled for this run'
+    value: ${{ steps.detect.outputs.enabled }}
