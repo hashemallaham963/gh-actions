@@ -1,0 +1,122 @@
+# Information:
+name: install docker
+description: "Install Docker CE, optionally register QEMU platforms, and set up Docker Buildx with BuildKit"
+branding:
+  icon: 'message-square'
+  color: 'blue'
+
+# Inputs:
+inputs:
+  docker-version:
+    description: 'Docker CE version to install (e.g. v24.0.9), or latest'
+    required: false
+    default: 'latest'
+  driver:
+    description: 'Buildx builder driver (docker, docker-container, kubernetes, remote)'
+    required: false
+    default: 'docker-container'
+  builder-name:
+    description: 'Name of the Buildx builder to create or reuse'
+    required: false
+    default: 'gh-actions-builder'
+  qemu:
+    description: 'Register QEMU platforms for cross-platform builds'
+    required: false
+    default: 'true'
+  platforms:
+    description: 'Comma-separated platforms QEMU should register (only used when qemu is true)'
+    required: false
+    default: 'linux/amd64,linux/arm64'
+
+
+# Logic:
+runs:
+  using: "composite"
+  steps:
+    - name: set up docker
+      id: ensure
+      uses: docker/setup-docker-action@v5
+      with:
+        version: ${{ inputs.docker-version }}
+
+    - name: set up qemu
+      id: qemu
+      if: ${{ inputs.qemu == 'true' }}
+      uses: docker/setup-qemu-action@v3
+      with:
+        platforms: ${{ inputs.platforms }}
+
+    - name: set up buildx
+      id: buildx
+      uses: docker/setup-buildx-action@v3
+      with:
+        install: true
+        driver: ${{ inputs.driver }}
+        name: ${{ inputs.builder-name }}
+
+    - name: finalize
+      id: finalize
+      if: always()
+      shell: bash
+      env:
+        # previous steps' outcomes, for validation later
+        DOCKER_OUTCOME: ${{ steps.ensure.outcome }}
+        QEMU_OUTCOME: ${{ steps.qemu.outcome }}
+        BUILDX_OUTCOME: ${{ steps.buildx.outcome }}
+        # configuration
+        BUILDER_NAME: ${{ inputs.builder-name }}
+        QEMU_ENABLED: ${{ inputs.qemu }}
+        PLATFORMS: ${{ inputs.qemu == 'true' && inputs.platforms || '' }}
+      run: |
+        # a skipped QEMU step is expected only when qemu is disabled
+        QEMU_OK="no"
+        case "$QEMU_OUTCOME" in
+          success)
+            QEMU_OK="yes"
+            ;;
+          skipped)
+            if [ "$QEMU_ENABLED" != "true" ]; then
+              QEMU_OK="yes"
+            fi
+            ;;
+        esac
+
+        if [ "$DOCKER_OUTCOME" != "success" ] || [ "$QEMU_OK" != "yes" ] || [ "$BUILDX_OUTCOME" != "success" ]; then
+          echo "❌ Docker setup failed (docker=$DOCKER_OUTCOME, qemu=$QEMU_OUTCOME, buildx=$BUILDX_OUTCOME)"
+          echo "status=failed" >> "$GITHUB_OUTPUT"
+          exit 1
+        fi
+
+        if [ "$QEMU_OUTCOME" = "skipped" ]; then
+          echo "ℹ️ QEMU setup skipped"
+        fi
+        
+        # enable buildkit for upcoming workflow's steps
+        echo "DOCKER_BUILDKIT=1" >> "$GITHUB_ENV"
+
+        # export action's outputs
+        echo "docker_version=$(docker --version)" >> "$GITHUB_OUTPUT"
+        echo "buildx_version=$(docker buildx version)" >> "$GITHUB_OUTPUT"
+        echo "builder_name=$BUILDER_NAME" >> "$GITHUB_OUTPUT"
+        echo "qemu_platforms=$PLATFORMS" >> "$GITHUB_OUTPUT"
+        echo "status=success" >> "$GITHUB_OUTPUT"
+
+        echo "✅ BuildKit enabled (builder: $BUILDER_NAME)"
+
+# Outputs:
+outputs:
+  status:
+    description: 'Status of the operation'
+    value: ${{ steps.finalize.outputs.status }}
+  docker_version:
+    description: 'Installed Docker version'
+    value: ${{ steps.finalize.outputs.docker_version }}
+  buildx_version:
+    description: 'Installed Docker Buildx version'
+    value: ${{ steps.finalize.outputs.buildx_version }}
+  builder_name:
+    description: 'Name of the active Buildx builder'
+    value: ${{ steps.finalize.outputs.builder_name }}
+  qemu_platforms:
+    description: 'Platforms registered with QEMU for cross-platform builds'
+    value: ${{ steps.finalize.outputs.qemu_platforms }}
