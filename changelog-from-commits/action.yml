@@ -1,0 +1,121 @@
+# Information:
+name: changelog from commits
+description: "Generate a markdown changelog from Git commit messages"
+branding:
+  icon: 'message-square'
+  color: 'blue'
+
+# Inputs:
+inputs:
+  from:
+    description: 'Starting tag/ref. Empty with an empty "to" means: previous semver tag'
+    required: false
+    default: ''
+  to:
+    description: 'Ending tag/ref. Empty with an empty "from" means: triggering tag (or HEAD)'
+    required: false
+    default: ''
+
+
+# Logic:
+runs:
+  using: "composite"
+  steps:
+    - name: generate changelog
+      id: changelog
+      shell: bash
+      env:
+        FROM: ${{ inputs.from }}
+        TO: ${{ inputs.to }}
+        REF_TYPE: ${{ github.ref_type }}
+        CURRENT_TAG: ${{ github.ref_name }}
+        EVENT_NAME: ${{ github.event_name }}
+        RELEASE_ACTION: ${{ github.event.action }}
+        RELEASE_ID: ${{ github.event.release.id }}
+        REPOSITORY: ${{ github.repository }}
+        GITHUB_TOKEN: ${{ github.token }}
+      run: |
+        set -e
+        trap 'echo "status=failed" >> "$GITHUB_OUTPUT"' ERR
+
+        if ! command -v git >/dev/null 2>&1; then
+          echo "❌ git is not installed"
+          exit 1
+        fi
+
+        # Both inputs empty: go from the previous semver tag to the tag that
+        # triggered the workflow (HEAD when the trigger is not a tag).
+        if [ -z "$FROM" ] && [ -z "$TO" ]; then
+          if [ "$REF_TYPE" = "tag" ] && [ -n "$CURRENT_TAG" ]; then
+            TO="$CURRENT_TAG"
+          else
+            TO="HEAD"
+          fi
+
+          FROM=$(git tag --list '[0-9]*' 'v[0-9]*' --sort=-v:refname \
+            | grep -Fxv "$TO" | head -n 1 || true)
+          echo "Tag mode: from '$FROM' to '$TO'"
+        elif [ -z "$TO" ]; then
+          TO="HEAD"
+        fi
+
+        # in case 'FROM' is not empty, consider the range otherwise
+        # consider one single commit which is stored in 'TO'
+        if [ -n "$FROM" ]; then
+          RANGE="${FROM}..${TO}"
+        else
+          RANGE="$TO"
+        fi
+
+        echo "Generating changelog for: $RANGE"
+        CHANGELOG=$(git log --no-merges --pretty=format:'- %s (%h)' "$RANGE")
+
+        DELIMITER="EOF_CHANGELOG_$$"
+        {
+          echo "changelog<<$DELIMITER"
+          printf '%s\n' "$CHANGELOG"
+          echo "$DELIMITER"
+        } >> "$GITHUB_OUTPUT"
+
+        ASSET_PATH="$RUNNER_TEMP/CHANGELOG.md"
+        printf '%s\n' "$CHANGELOG" > "$ASSET_PATH"
+        echo "✅ Changelog generated"
+
+        # On release:created, attach the changelog to the release.
+        ASSET_URL=""
+        if [ "$EVENT_NAME" = "release" ] && [ "$RELEASE_ACTION" = "created" ] && [ -n "$RELEASE_ID" ]; then
+          if ! command -v curl >/dev/null 2>&1 || ! command -v jq >/dev/null 2>&1; then
+            echo "❌ curl and jq are required to upload release assets"
+            exit 1
+          fi
+
+          echo "Uploading CHANGELOG.md to release $RELEASE_ID"
+          RESPONSE=$(curl -sS -f --max-time 60 \
+            -X POST \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Content-Type: text/markdown" \
+            --data-binary @"$ASSET_PATH" \
+            "https://uploads.github.com/repos/$REPOSITORY/releases/$RELEASE_ID/assets?name=CHANGELOG.md")
+
+          ASSET_URL=$(printf '%s' "$RESPONSE" | jq -r '.browser_download_url // empty')
+          echo "✅ Uploaded release asset: ${ASSET_URL:-CHANGELOG.md}"
+        fi
+
+        {
+          if [ -n "$ASSET_URL" ]; then
+            echo "asset_url=$ASSET_URL"
+          fi
+          echo "status=success"
+        } >> "$GITHUB_OUTPUT"
+
+# Outputs:
+outputs:
+  changelog:
+    description: 'Markdown changelog of the commits in the range'
+    value: ${{ steps.changelog.outputs.changelog }}
+  asset_url:
+    description: 'Download URL of CHANGELOG.md when uploaded to a release (empty otherwise)'
+    value: ${{ steps.changelog.outputs.asset_url }}
+  status:
+    description: 'Status of the operation'
+    value: ${{ steps.changelog.outputs.status }}
