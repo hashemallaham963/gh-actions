@@ -2,9 +2,11 @@ name: test changelog from commits
 
 on:
   workflow_dispatch:
+  release:
+    types: [created]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   test:
@@ -45,3 +47,14 @@ jobs:
             exit 1
           fi
           echo "✅ action test passed"
+
+      - name: Verify release asset
+        if: github.event_name == 'release'
+        env:
+          ASSET_URL: ${{ steps.changelog.outputs.asset_url }}
+        run: |
+          if [ -z "$ASSET_URL" ]; then
+            echo "❌ no release asset URL returned"
+            exit 1
+          fi
+          echo "✅ release asset: $ASSET_URL"
