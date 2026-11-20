@@ -1,0 +1,95 @@
+# Information:
+name: publish docker image
+description: "Log in to the registry if needed, push a built image, and report the published digest"
+branding:
+  icon: 'message-square'
+  color: 'blue'
+
+# Inputs:
+inputs:
+  image:
+    description: 'Fully qualified local image reference to push (e.g. ghcr.io/org/app:latest)'
+    required: true
+  registry:
+    description: 'Registry host to log in to (e.g. ghcr.io or an ECR registry URI); required when credentials are supplied'
+    required: false
+    default: ''
+  username:
+    description: 'Registry username; supply together with password and registry to log in'
+    required: false
+    default: ''
+  password:
+    description: 'Registry password or token; passed to docker login via stdin'
+    required: false
+    default: ''
+
+
+# Logic:
+runs:
+  using: "composite"
+  steps:
+    - name: publish image
+      id: publish
+      shell: bash
+      env:
+        IMAGE: ${{ inputs.image }}
+        REGISTRY: ${{ inputs.registry }}
+        USERNAME: ${{ inputs.username }}
+        PASSWORD: ${{ inputs.password }}
+      run: |
+        set -e
+        set -o pipefail
+        trap 'echo "status=failed" >> "$GITHUB_OUTPUT"' ERR
+
+        if [ -z "$IMAGE" ]; then
+          echo "❌ No image provided"
+          echo "status=failed" >> "$GITHUB_OUTPUT"
+          exit 1
+        fi
+
+        if ! command -v docker >/dev/null 2>&1; then
+          echo "❌ docker command not found - run install-docker first"
+          echo "status=failed" >> "$GITHUB_OUTPUT"
+          exit 1
+        fi
+
+        if [ -n "$USERNAME" ] || [ -n "$PASSWORD" ]; then
+          if [ -z "$USERNAME" ] || [ -z "$PASSWORD" ]; then
+            echo "❌ username and password must be supplied together"
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          if [ -z "$REGISTRY" ]; then
+            echo "❌ registry is required when credentials are supplied"
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+          echo "🔐 Logging in to $REGISTRY as $USERNAME"
+          printf '%s' "$PASSWORD" | docker login "$REGISTRY" --username "$USERNAME" --password-stdin
+        else
+          echo "ℹ️ No credentials supplied; using the runner's existing Docker login"
+        fi
+
+        PUSH_LOG="$(mktemp)"
+        trap 'rm -f "$PUSH_LOG"' EXIT
+
+        echo "📤 Pushing $IMAGE"
+        docker push "$IMAGE" 2>&1 | tee "$PUSH_LOG"
+
+        DIGEST="$(grep -oE 'sha256:[a-f0-9]{64}' "$PUSH_LOG" | tail -n 1 || true)"
+        rm -f "$PUSH_LOG"
+
+        echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+        echo "status=success" >> "$GITHUB_OUTPUT"
+
+        echo "✅ Published $IMAGE"
+
+# Outputs:
+outputs:
+  status:
+    description: 'Status of the operation'
+    value: ${{ steps.publish.outputs.status }}
+  digest:
+    description: 'Digest reported by the push, or empty when unavailable'
+    value: ${{ steps.publish.outputs.digest }}
