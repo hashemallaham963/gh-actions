@@ -2,7 +2,7 @@
 
 A minimal GitHub composite action that turns a range of Git commits into a markdown bullet list.
 
-Designed for **tag-driven releases**: with no inputs, it uses the previous semver tag and the tag that triggered the workflow. On a `release: created` event, it also uploads the changelog as a release asset named `CHANGELOG.md`.
+Designed for **tag-driven releases**: with no inputs, it uses the previous semver tag and the tag that triggered the workflow. On a `release: created` event, it also uploads the changelog as a release asset named `CHANGELOG.md` and appends it to the release notes under a `changelog:` heading.
 
 ## Usage
 
@@ -125,6 +125,7 @@ Produces something like:
 - Off a tag event (branch push, `workflow_dispatch`), `to` falls back to `HEAD` and `from` is the highest semver tag.
 - Merge commits are excluded (`git log --no-merges`), so the list reflects actual work.
 - Commit subjects are used verbatim. Conventional commits like `feat: ...` / `fix: ...` produce the most readable changelog.
-- Asset upload needs `permissions: contents: write` and `curl` + `jq` on the runner (both present on `ubuntu-latest`). It only fires on `release: created`; if you trigger on `published` instead, no upload occurs.
+- Asset upload and release-note updates need `permissions: contents: write` and `curl` + `jq` on the runner (both present on `ubuntu-latest`). They only fire on `release: created`; if you trigger on `published` instead, nothing is uploaded or appended.
+- Release notes are appended to, not overwritten: existing text is kept and followed by a blank line, `changelog:`, then the generated list. Re-running the workflow will append the section again.
 - If no commits fall in the range, `changelog` is empty but `status` is still `success`.
 - Inputs are passed through `env:` and the range is quoted, so branch names and refs are safe to interpolate.
